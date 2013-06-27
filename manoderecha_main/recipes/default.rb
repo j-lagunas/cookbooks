@@ -6,9 +6,10 @@ include_recipe "apache2::mod_php5"
 include_recipe "build-essential"
 include_recipe "mysql::server"
 include_recipe "nodejs"
+include_recipe "phantomjs"
 
-# Install packages
-%w{build-essential cron php5-xsl}.each do
+# Install some packages
+%w{cron php5-xsl}.each do
 |pkg|
   package pkg do
     action :install
@@ -25,7 +26,7 @@ php_pear "symfony" do
   action :install
 end
 php_pear "Structures_Graph" do
-	action :install
+  action :install
 end
 
 # Install node packages
@@ -35,42 +36,44 @@ bash "Install node packages" do
     EOH
 end
 
+# Install phpmyadmin
+cookbook_file "/tmp/phpmyadmin.deb.conf" do
+  source "phpmyadmin.deb.conf"
+end
+bash "debconf_for_phpmyadmin" do
+  code "debconf-set-selections /tmp/phpmyadmin.deb.conf"
+end
+package "phpmyadmin"
 
 
-#----- Configuration for manoderecha installation
+#--- Execute only first time if was successfull, after this comment it
 
-# # Enable default apache site
-# apache_site "default" do
-#   enable true
-# end
+# create all the databases from the Vagrantfile json config
+node[:db].each do |env, name|
+  execute "create database #{name}" do
+    command "mysql -uroot -p#{node[:mysql][:server_root_password]} -e 'create database if not exists #{name}'"
+    user "vagrant"
+  end
+end
 
-# # Create simbolic link to md
-# bash "Create simbolic link to md" do
-#     code <<-EOH
-#     sudo ln -fs /home/vagrant/manoderecha /var/www/manoderecha
-#     EOH
-# end
+#set memory_limit
+bash "set memory_limit" do
+  code "perl -pi -e 's[memory_limit = -1|memory_limit = 128M ][memory_limit = 512M]g' /etc/php5/*/php.ini"
+end
 
-# # create all the databases from the Vagrantfile json config
-# node[:db].each do |env, name|
-# 	execute "create database #{name}" do
-# 		command "mysql -uroot -p#{node[:mysql][:server_root_password]} -e 'create database if not exists #{name}'"
-# 		user "vagrant"
-# 	end
-# end
+# permit override url
+bash "allow override" do
+  code "perl -pi -e 's[AllowOverride None][AllowOverride All]g' /etc/apache2/sites-enabled/000-default"
+  notifies :restart, resources("service[apache2]"), :immediately
+end
 
-# #set memory_limit
-# bash "set memory_limit" do
-#   code "sudo perl -pi -e 's[memory_limit = -1|memory_limit = 128M ][memory_limit = 512M]g' /etc/php5/*/php.ini"
-# end
+# install manoderecha
+bash "install manoderecha" do
+  cwd "/var/www/manoderecha"
+  code "php symfony propel:build-all --no-confirmation && php symfony cc"
+end
 
-# # permit override url
-# bash "allow override" do
-#   code "sudo perl -pi -e 's[AllowOverride None][AllowOverride All]g' /etc/apache2/sites-enabled/000-default"
-#   notifies :restart, resources("service[apache2]"), :delayed
-# end
-
-# # install manoderecha
-# bash "install manoderecha" do
-#   code "cd /home/vagrant/manoderecha && php symfony propel:build-all --no-confirmation && php symfony cc"
-# end
+# Enable default apache site
+apache_site "default" do
+  enable true
+end
