@@ -32,8 +32,8 @@ end
 # Install node packages
 bash "Install node packages" do
     code <<-EOH
-    sudo npm install karma
-    sudo npm install -g less
+    npm install -g karma
+    npm install -g less
     EOH
 end
 
