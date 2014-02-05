@@ -9,7 +9,7 @@ include_recipe "nodejs"
 include_recipe "phantomjs"
 
 # Install some packages
-%w{cron php5-xsl}.each do
+%w{cron php5-xsl php5-curl}.each do
 |pkg|
   package pkg do
     action :install
